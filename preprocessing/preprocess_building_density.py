@@ -6,18 +6,18 @@ import numpy as np
 from tqdm import tqdm
 
 TILE_PATHS = [
-    { "path": "/data_raw/egypt/", "name": "EGY1" },
-    { "path": "/data_raw/ghana/", "name": "GHA1" },
-    { "path": "/data_raw/israel_gaza_1/", "name": "ISR1" },
-    { "path": "/data_raw/israel_gaza_2/", "name": "ISR2" },
-    { "path": "/data_raw/tanzania_dar/", "name": "TZA1" },
-    { "path": "/data_raw/tanzania_kigoma/", "name": "TZA2" },
-    { "path": "/data_raw/tanzania_kilimanjaro/", "name": "TZA3" },
-    { "path": "/data_raw/tanzania_mwanza_Q2/", "name": "TZA4" },
-    { "path": "/data_raw/tanzania_mwanza_Q3/", "name": "TZA5" },
-    { "path": "/data_raw/uganda/", "name": "UGA1" },
-    { "path": "/data_raw/denmark_2020/", "name": "DNK1" },
-    { "path": "/data_raw/denmark_2021/", "name": "DNK2" },
+    { "path": "data_raw/egypt/", "name": "EGY1" },
+    { "path": "data_raw/ghana/", "name": "GHA1" },
+    { "path": "data_raw/israel_gaza_1/", "name": "ISR1" },
+    { "path": "data_raw/israel_gaza_2/", "name": "ISR2" },
+    { "path": "data_raw/tanzania_dar/", "name": "TZA1" },
+    { "path": "data_raw/tanzania_kigoma/", "name": "TZA2" },
+    { "path": "data_raw/tanzania_kilimanjaro/", "name": "TZA3" },
+    { "path": "data_raw/tanzania_mwanza_Q2/", "name": "TZA4" },
+    { "path": "data_raw/tanzania_mwanza_Q3/", "name": "TZA5" },
+    { "path": "data_raw/uganda/", "name": "UGA1" },
+    { "path": "data_raw/denmark_2020/", "name": "DNK1" },
+    { "path": "data_raw/denmark_2021/", "name": "DNK2" },
 ]
 
 TEST_LOCATIONS = [
@@ -181,7 +181,7 @@ def preprocess_tile_to_image(folder_src: str,
         path_dict = TILE_PATHS
 
     for tile_dict in path_dict:
-        folder = os.path.join(folder_src, (tile_dict["path"]))
+        folder = folder_src + tile_dict["path"]
         name = tile_dict["name"]
 
         path_mask = os.path.join(folder, "mask.gpkg")
