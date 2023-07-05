@@ -1,6 +1,7 @@
 # Standard Library
 import os
 from tqdm import tqdm
+from matplotlib import pyplot as plt
 
 # PyTorch
 import torch
@@ -12,6 +13,7 @@ from .training_utils import patience_calculator, visualise
 
 # utils
 from utils import visualise
+from models.model_ViT import unpatchify
 
 def training_loop(
     num_epochs: int,
@@ -23,6 +25,7 @@ def training_loop(
     val_loader: DataLoader,
     test_loader: DataLoader,
     metrics: list = None,
+    lr_scheduler: str = None,
     name="model",
     out_folder="trained_models/",
     predict_func=None,
@@ -43,12 +46,26 @@ def training_loop(
     os.makedirs(out_folder, exist_ok=True)
 
     # Loss and optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, eps=1e-06)
     scaler = GradScaler()
 
     # Save the initial learning rate in optimizer's param_groups
     for param_group in optimizer.param_groups:
         param_group['initial_lr'] = learning_rate
+
+    if lr_scheduler == 'cosine_annealing':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            20,
+            2,
+            eta_min=0.000001,
+            last_epoch=num_epochs - 1,
+        )
+    elif lr_scheduler == 'reduce_on_plateau':
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1, 2, 3, 4, 5], gamma=(10))
+        warmup = True
+
+
 
 
     best_epoch = 0
@@ -56,9 +73,19 @@ def training_loop(
     best_model_state = model.state_dict().copy()
     epochs_no_improve = 0
 
+    # used for plots
+    tl = []
+    vl = []
+    e = []
+    lr = []
 
     # Training loop
     for epoch in range(num_epochs):
+        if epoch == 5 and lr_scheduler == 'reduce_on_plateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=10, min_lr=1e-6)
+            warmup = False
+            print('Warmup finished')
+
         model.train()
 
         # Initialize the running loss
@@ -105,9 +132,11 @@ def training_loop(
 
                     val_loss = 0
 
-                    # visualise some validation results
-                    num_visualisations = 16
-                    vis_batches = [i*len(val_loader)//(num_visualisations+1) for i in range(num_visualisations)]
+                    # # visualise some validation results
+                    num_visualisations = 10
+                    if num_visualisations > len(val_loader):
+                        num_visualisations = len(val_loader)
+                    # vis_batches = [i*len(val_loader)//(num_visualisations+1) for i in range(num_visualisations)]
                     vis_images = []
                     vis_labels = []
                     vis_preds = []
@@ -123,16 +152,20 @@ def training_loop(
                         loss = criterion(outputs, labels)
                         val_loss += loss.item()
 
-                        if j in vis_batches:
-                            vis_images.append(images.detach().cpu().numpy()[0])
-                            vis_labels.append(labels.detach().cpu().numpy()[0])
-                            vis_preds.append(outputs.detach().cpu().numpy()[0])
+                        if labels.shape != outputs.shape:
+                            outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
+                                                 n_patches=4, tensors=outputs)
+
+                        vis_images.append(images.detach().cpu().numpy()[0])
+                        vis_labels.append(labels.detach().cpu().numpy()[0])
+                        vis_preds.append(outputs.detach().cpu().numpy()[0])
                         
                         for metric in metrics:
                             val_metrics_values[metric.__name__] += metric(outputs, labels)
                         
                     if visualise_validation:
-                        visualise(vis_images,np.squeeze(vis_labels),np.squeeze(vis_preds), images=num_visualisations, channel_first=True, vmin=0,vmax=1, save_path=os.path.join(save_dir, f"val_pred_{epoch}.png"))
+
+                        visualise(vis_images, np.squeeze(vis_labels),np.squeeze(vis_preds), images=num_visualisations, channel_first=True, vmin=0,vmax=1, save_path=os.path.join(save_dir, f"val_pred_{epoch}.png"))
 
                 # Append val_loss to the train_pbar
                 train_pbar.set_postfix({
@@ -140,7 +173,20 @@ def training_loop(
                     **{name: f"{value / (i + 1):.4f}" for name, value in train_metrics_values.items()},
                     "val_loss": f"{val_loss / (j + 1):.4f}",
                     **{f"val_{name}": f"{value / (j + 1):.4f}" for name, value in val_metrics_values.items()},
+                    f"lr": optimizer.param_groups[0]['lr'],
                 }, refresh=True)
+                tl.append(train_loss / (i + 1))
+                vl.append(val_loss/ (j + 1))
+                lr.append(optimizer.param_groups[0]['lr'])
+
+                # # Update the scheduler
+                if lr_scheduler == 'cosine_annealing':
+                    scheduler.step()
+                elif lr_scheduler == 'reduce_on_plateau':
+                    if warmup:
+                        scheduler.step()
+                    else:
+                        scheduler.step(vl[-1])
 
                 if best_loss is None:
                     best_epoch = epoch
@@ -165,6 +211,17 @@ def training_loop(
                     epochs_no_improve += 1
                 torch.save(best_model_state, os.path.join(out_folder, f"{name}_last.pt"))
 
+                # visualize loss & lr curves
+                e.append(epoch)
+                plt.plot(e, tl, label='Training Loss', )
+                plt.plot(e, vl, label='Validation Loss')
+                plt.legend()
+                plt.savefig(os.path.join(out_folder, f"loss.png"))
+                plt.close()
+                plt.plot(e, lr, label='Learning Rate')
+                plt.legend()
+                plt.savefig(os.path.join(out_folder, f"lr.png"))
+                plt.close()
 
         # # Early stopping
         # if epochs_no_improve == patience_calculator(epoch, t_0, t_mult, max_patience):
@@ -192,6 +249,12 @@ def training_loop(
             test_loss += loss.item()
 
         print(f"Test Accuracy: {test_loss / (k + 1):.4f}")
+        if labels.shape != outputs.shape:
+            outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
+                                 n_patches=4, tensors=outputs)
+
+        visualise(images.detach().cpu().numpy(), np.squeeze(labels.detach().cpu().numpy()), np.squeeze(outputs.detach().cpu().numpy()), images=5,
+                  channel_first=True, vmin=0, vmax=1, save_path=os.path.join(save_dir, f"test_pred.png"))
 
     # Save the model
     torch.save(best_model_state, os.path.join(out_folder, f"{name}.pt"))

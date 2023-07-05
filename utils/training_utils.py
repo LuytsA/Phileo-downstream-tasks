@@ -71,7 +71,7 @@ def render_s2_as_rgb(arr, channel_first=False):
     return rgb_slice
 
 def visualise(x, y, y_pred=None, images=5, channel_first=False,vmin=0, vmax=1, save_path=None):
-    random_patch_idxs = random.sample(range(0, y.shape[0]), images)
+    random_patch_idxs = sorted(random.sample(range(0, y.shape[0]), images))
 
     rows = images
     if y_pred is None:
