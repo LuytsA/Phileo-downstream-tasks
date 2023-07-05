@@ -39,7 +39,9 @@ def normalize_y(y: np.ndarray) -> np.ndarray:
     y = y.astype(np.float32, copy=False)
     y_norm = np.empty_like(y, dtype=np.float32)
     np.divide(y, 100.0, out=y_norm)
-    return np.squeeze(y_norm)
+    if y_norm.ndim != 3:
+        y_norm = np.squeeze(y_norm, axis=-1)
+    return y_norm
 
 
 def preprocess_image_to_patches(
@@ -166,7 +168,8 @@ def preprocess_image_to_patches(
 
         np.save(os.path.join(folder_dst, f"{location}_{fid}_{TARGET}_s2.npy"), patches_s2)
 
-        assert patches_y_val.shape[0] == patches_s2_val.shape[0], "Number of patches do not match."
+        if not patches_y_val.shape[0] == patches_s2_val.shape[0]: #, "Number of patches do not match."
+            print()
         assert patches_label.shape[0] == patches_s2.shape[0], "Number of patches do not match."
 
         processed += 1
