@@ -108,7 +108,6 @@ def training_loop(
                     # visualise some validation results
                     num_visualisations = 16
                     vis_batches = [i*len(val_loader)//(num_visualisations+1) for i in range(num_visualisations)]
-                    print(vis_batches, len(val_loader))
                     vis_images = []
                     vis_labels = []
                     vis_preds = []
@@ -133,7 +132,6 @@ def training_loop(
                             val_metrics_values[metric.__name__] += metric(outputs, labels)
                         
                     if visualise_validation:
-                        print(len(vis_images),len(vis_labels),len(vis_preds))
                         visualise(vis_images,np.squeeze(vis_labels),np.squeeze(vis_preds), images=num_visualisations, channel_first=True, vmin=0,vmax=1, save_path=os.path.join(save_dir, f"val_pred_{epoch}.png"))
 
                 # Append val_loss to the train_pbar
