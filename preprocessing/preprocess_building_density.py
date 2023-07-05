@@ -39,7 +39,7 @@ def normalize_y(y: np.ndarray) -> np.ndarray:
     y = y.astype(np.float32, copy=False)
     y_norm = np.empty_like(y, dtype=np.float32)
     np.divide(y, 100.0, out=y_norm)
-    return y_norm
+    return np.squeeze(y_norm)
 
 
 def preprocess_image_to_patches(
@@ -144,9 +144,9 @@ def preprocess_image_to_patches(
             patches_label = patches_label[:idx_val]
 
             if patches_y_val.shape[0] != 0:
-                np.save(os.path.join(folder_dst, f"{location}_{fid}_val_y.npy"), patches_y_val)
+                np.save(os.path.join(folder_dst, f"{location}_{fid}_val_label_y.npy"), patches_y_val)
 
-        np.save(os.path.join(folder_dst, f"{location}_{fid}_{TARGET}_y.npy"), patches_label)
+        np.save(os.path.join(folder_dst, f"{location}_{fid}_{TARGET}_label_y.npy"), patches_label)
 
         patches_s2 = beo.array_to_patches(
             beo.raster_to_array(path_s2),
@@ -237,9 +237,9 @@ def preprocess_tile_to_image(folder_src: str,
 
 
 if __name__ == '__main__':
-    print('Processing tiles into images please wait...\n')
-    preprocess_tile_to_image(folder_src="/home/lcamilleri/data/s12_buildings/",
-                             folder_dst="/home/lcamilleri/data/s12_buildings/data_images/")
+    # print('Processing tiles into images please wait...\n')
+    # preprocess_tile_to_image(folder_src="/home/lcamilleri/data/s12_buildings/",
+    #                          folder_dst="/home/lcamilleri/data/s12_buildings/data_images/")
 
     print('\nProcessing images into patches please wait...\n')
     preprocess_image_to_patches(folder_src="/home/lcamilleri/data/s12_buildings/data_images/",
