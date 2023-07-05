@@ -1,6 +1,7 @@
 # Standard Library
 import os
 from tqdm import tqdm
+from matplotlib import pyplot as plt
 
 # PyTorch
 import torch
@@ -55,6 +56,12 @@ def training_loop(
     best_loss = None
     best_model_state = model.state_dict().copy()
     epochs_no_improve = 0
+
+    # used for plots
+    tl = []
+    vl = []
+    e = []
+    lr = []
 
 
     # Training loop
@@ -140,7 +147,11 @@ def training_loop(
                     **{name: f"{value / (i + 1):.4f}" for name, value in train_metrics_values.items()},
                     "val_loss": f"{val_loss / (j + 1):.4f}",
                     **{f"val_{name}": f"{value / (j + 1):.4f}" for name, value in val_metrics_values.items()},
+                    f"lr": optimizer.param_groups[0]['lr'],
                 }, refresh=True)
+                tl.append(train_loss / (i + 1))
+                vl.append(val_loss/ (j + 1))
+                lr.append(optimizer.param_groups[0]['lr'])
 
                 if best_loss is None:
                     best_epoch = epoch
@@ -165,6 +176,17 @@ def training_loop(
                     epochs_no_improve += 1
                 torch.save(best_model_state, os.path.join(out_folder, f"{name}_last.pt"))
 
+                # visualize loss & lr curves
+                e.append(epoch)
+                plt.plot(e, tl, label='Training Loss', )
+                plt.plot(e, vl, label='Validation Loss')
+                plt.legend()
+                plt.savefig(os.path.join(out_folder, f"loss.png"))
+                plt.close()
+                plt.plot(e, lr, label='Learning Rate')
+                plt.legend()
+                plt.savefig(os.path.join(out_folder, f"lr.png"))
+                plt.close()
 
         # # Early stopping
         # if epochs_no_improve == patience_calculator(epoch, t_0, t_mult, max_patience):
