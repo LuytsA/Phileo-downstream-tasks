@@ -13,6 +13,7 @@ from .training_utils import patience_calculator, visualise
 
 # utils
 from utils import visualise
+from models.model_ViT import unpatchify
 
 def training_loop(
     num_epochs: int,
@@ -81,7 +82,7 @@ def training_loop(
     # Training loop
     for epoch in range(num_epochs):
         if epoch == 5 and lr_scheduler == 'reduce_on_plateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=50, min_lr=1e-6)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=10, min_lr=1e-6)
             warmup = False
             print('Warmup finished')
 
@@ -151,6 +152,9 @@ def training_loop(
                         loss = criterion(outputs, labels)
                         val_loss += loss.item()
 
+                        if labels.shape != outputs.shape:
+                            outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
+                                                 n_patches=4, tensors=outputs)
 
                         vis_images.append(images.detach().cpu().numpy()[0])
                         vis_labels.append(labels.detach().cpu().numpy()[0])
@@ -160,6 +164,7 @@ def training_loop(
                             val_metrics_values[metric.__name__] += metric(outputs, labels)
                         
                     if visualise_validation:
+
                         visualise(vis_images, np.squeeze(vis_labels),np.squeeze(vis_preds), images=num_visualisations, channel_first=True, vmin=0,vmax=1, save_path=os.path.join(save_dir, f"val_pred_{epoch}.png"))
 
                 # Append val_loss to the train_pbar
@@ -244,6 +249,12 @@ def training_loop(
             test_loss += loss.item()
 
         print(f"Test Accuracy: {test_loss / (k + 1):.4f}")
+        if labels.shape != outputs.shape:
+            outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
+                                 n_patches=4, tensors=outputs)
+
+        visualise(images.detach().cpu().numpy(), np.squeeze(labels.detach().cpu().numpy()), np.squeeze(outputs.detach().cpu().numpy()), images=5,
+                  channel_first=True, vmin=0, vmax=1, save_path=os.path.join(save_dir, f"test_pred.png"))
 
     # Save the model
     torch.save(best_model_state, os.path.join(out_folder, f"{name}.pt"))

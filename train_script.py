@@ -8,6 +8,8 @@ from datetime import date
 
 import sys; sys.path.append("../")
 from models.model_SimpleUNet import SimpleUnet
+from models.model_ViT import vit_mse_losses, ViT
+
 from utils import (
     load_data,
     training_loop,
@@ -16,15 +18,16 @@ from utils import (
 
 
 
+
 if __name__ == "__main__":
 
     LEARNING_RATE = 0.0001
-    NUM_EPOCHS = 250
-    BATCH_SIZE = 32
-    REGIONS =['ISR', 'EGY']#, 'east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal']
+    NUM_EPOCHS = 500
+    BATCH_SIZE = 64
+    REGIONS =['']#, 'east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal']
     DATA_FOLDER = '/home/lcamilleri/data/s12_buildings/data_patches/'
-    model = SimpleUnet(input_dim=10, output_dim=1)
-    criterion = nn.MSELoss()
+    model = ViT(chw=(10, 64, 64),  n_patches=4, n_blocks=2, hidden_d=768, n_heads=12)# SimpleUnet(input_dim=10, output_dim=1)
+    criterion = vit_mse_losses(n_patches=4)# nn.MSELoss()
     lr_scheduler = 'reduce_on_plateau' # None, 'reduce_on_plateau', 'cosine_annealing'
     
     NAME = model.__class__.__name__
@@ -58,11 +61,12 @@ if __name__ == "__main__":
         model=model,
         criterion=criterion,
         device=device,
-        metrics=[
-            mse.to(device),
-            wmape.to(device),
-            mae.to(device),
-        ],
+        # metrics=[
+        #     mse.to(device),
+        #     wmape.to(device),
+        #     mae.to(device),
+        # ],
+        metrics=[],
         lr_scheduler=lr_scheduler,
         train_loader=dl_train,
         val_loader=dl_val,
