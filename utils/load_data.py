@@ -64,22 +64,18 @@ def load_data(*, x="s2", y="area",regions=['north-america', 'east-africa', 'euro
         x_val_files = x_val_files + sorted(glob(os.path.join(folder, f"{region}*val_{x}.npy")))
         y_val_files = y_val_files + sorted(glob(os.path.join(folder, f"{region}*val_label_{y}.npy")))
         
-        x_test_files = x_val_files + sorted(glob(os.path.join(folder, f"{region}*test_{x}.npy")))
-        y_test_files = y_val_files + sorted(glob(os.path.join(folder, f"{region}*test_label_{y}.npy")))
+        x_test_files = x_test_files + sorted(glob(os.path.join(folder, f"{region}*test_{x}.npy")))
+        y_test_files = y_test_files + sorted(glob(os.path.join(folder, f"{region}*test_label_{y}.npy")))
 
 
     x_train = beo.MultiArray([np.load(f,mmap_mode='r') for f in x_train_files])
-    y_train = [np.load(f,mmap_mode='r') for f in y_train_files]
+    y_train = beo.MultiArray([np.load(f,mmap_mode='r') for f in y_train_files])
     
     x_val = beo.MultiArray([np.load(f,mmap_mode='r') for f in x_val_files])
-    y_val = [np.load(f,mmap_mode='r') for f in y_val_files]
+    y_val = beo.MultiArray([np.load(f,mmap_mode='r') for f in y_val_files])
     
     x_test = beo.MultiArray([np.load(f,mmap_mode='r') for f in x_test_files])
-    y_test = [np.load(f,mmap_mode='r') for f in y_test_files]
-    
-    y_train = beo.MultiArray([np.expand_dims(yt, -1) for yt in y_train])
-    y_val = beo.MultiArray([np.expand_dims(yt, -1) for yt in y_val])
-    y_test = beo.MultiArray([np.expand_dims(yt, -1) for yt in y_test])
+    y_test = beo.MultiArray([np.load(f,mmap_mode='r') for f in y_test_files])
 
     assert len(x_train) == len(y_train) and len(x_test) == len(y_test) and len(x_val) == len(y_val), "Lengths of x and y do not match."
 
