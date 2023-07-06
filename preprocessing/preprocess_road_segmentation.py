@@ -317,7 +317,7 @@ def main():
     tile_size=64
     val_split_ratio = 0.1
     
-    with open('data/train_test_locations.json', 'r') as f:
+    with open('utils/roads_train_test_locations.json', 'r') as f:
         train_test_locations = json.load(f)
 
 
