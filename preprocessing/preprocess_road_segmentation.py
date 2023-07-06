@@ -10,6 +10,8 @@ from matplotlib import pyplot as plt
 import json
 import time
 import multiprocessing as mp
+from functools import partial
+import concurrent.futures
 
 
 def select_and_save_patches(
@@ -147,8 +149,6 @@ def select_and_save_patches(
                 'threshold_road_presence':road_density_ratio, 'threshold_cloud_presence':threshold_clouds, 'fraction_no_roads':FRACTION_NO_ROADS, 'max_allowed_cloud_cover':MAX_CLOUD_COVER,
                 'partition':partition, 'val_split_ratio':val_split_ratio if partition=='train' else None}  
     
-    print(f'done with tile {tile}')
-
     with open(f'{dst_folder}/metadata/{tile}.json', 'w') as fp:
         json.dump(metadata, fp)
 
@@ -201,30 +201,31 @@ def process_tile(
     -------
     None
     '''
-    
-    print(f'process tile {tile}')
+
     label = f'{folder_src}/{tile}_label_roads.tif'
     im1 = f'{folder_src}/{tile}_0.tif'
     im2 = f'{folder_src}/{tile}_1.tif'
     im3 = f'{folder_src}/{tile}_2.tif'
 
-    assert bo.check_rasters_are_aligned([label,im1,im2,im3]), 'labels and images are not aligned'
+    try:
+        assert bo.check_rasters_are_aligned([label,im1,im2,im3]), 'labels and images are not aligned'
 
 
-    label_arr = bo.raster_to_array(label)
-    label_patches = bo.array_to_patches(label_arr, tile_size=patch_size, n_offsets=overlaps)
+        label_arr = bo.raster_to_array(label)
+        label_patches = bo.array_to_patches(label_arr, tile_size=patch_size, n_offsets=overlaps)
 
 
+        # save s2 patches (3 images per label)
+        im_patches = []
+        for i,raster in enumerate([im1,im2,im3]):
+            arr = bo.raster_to_array(raster)
+            im_patches.append(bo.array_to_patches(arr, tile_size=patch_size, n_offsets=overlaps))
 
-    # save s2 patches (3 images per label)
-    im_patches = []
-    for i,raster in enumerate([im1,im2,im3]):
-        arr = bo.raster_to_array(raster)
-        im_patches.append(bo.array_to_patches(arr, tile_size=patch_size, n_offsets=overlaps))
+        select_and_save_patches(tile=tile, label_patches=label_patches, s2_patches=im_patches, dst_folder=folder_dst,
+                    partition=partition, road_density_ratio=road_density_ratio, threshold_clouds=threshold_clouds, val_split_ratio=val_split_ratio)
 
-    select_and_save_patches(tile=tile, label_patches=label_patches, s2_patches=im_patches, dst_folder=folder_dst,
-                partition=partition, road_density_ratio=road_density_ratio, threshold_clouds=threshold_clouds, val_split_ratio=val_split_ratio)
-
+    except Exception as e:
+        print(f'WARNING: tile {tile} failed with error: \n',e)
 
 
 def process_data(
@@ -272,6 +273,10 @@ def process_data(
     train_locations : List[str]
         List of the location that should be in the train set e.g. ['east-africa_0','north-america_5']
         From this set val_split_ratio will be save as validation set.
+
+    max_worker: int
+        Max number of workers to process different tiles in parallel
+
     Returns
     -------
     None
@@ -290,33 +295,14 @@ def process_data(
 
 
     print('processing train locations ...')
-    if num_workers<=1:
-        for tile in tqdm(train_locations):
-            process_tile(tile, folder_src, folder_dst, overlaps, patch_size,road_density_ratio, threshold_clouds, val_split_ratio, 'train')
-    else:
-        processes = [mp.Process(target=process_tile, args=(tile, folder_src, folder_dst, overlaps, patch_size,road_density_ratio, threshold_clouds, val_split_ratio, 'train')) for tile in train_locations]
-        for i in tqdm(range(0,len(train_locations)//num_workers +1 )):
-            subprocesses = processes[i*num_workers:(i+1)*num_workers]
-            for process in subprocesses:
-                process.start()
-            # wait for all processes to complete
-            for process in subprocesses:
-                process.join()
-
+    proc = partial(process_tile, folder_dst = folder_dst, folder_src = folder_src, overlaps=overlaps, patch_size=patch_size, road_density_ratio=road_density_ratio, threshold_clouds=threshold_clouds, val_split_ratio=val_split_ratio,partition='train')
+    with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+        list(tqdm(executor.map(proc, train_locations), total=len(train_locations)))
 
     print('processing test locations ...')
-    if num_workers<=1:
-        for tile in tqdm(test_locations):
-            process_tile(tile, folder_src, folder_dst, overlaps, patch_size,road_density_ratio, threshold_clouds, val_split_ratio, 'test')
-    else:
-        processes = [mp.Process(target=process_tile, args=(tile, folder_src, folder_dst, overlaps, patch_size,road_density_ratio, threshold_clouds, val_split_ratio, 'test')) for tile in test_locations]
-        for i in tqdm(range(0,len(test_locations)//num_workers +1 )):
-            subprocesses = processes[i*num_workers:(i+1)*num_workers]
-            for process in subprocesses:
-                process.start()
-            # wait for all processes to complete
-            for process in subprocesses:
-                process.join()
+    proc = partial(process_tile, folder_dst = folder_dst, folder_src = folder_src, overlaps=overlaps, patch_size=patch_size, road_density_ratio=road_density_ratio, threshold_clouds=threshold_clouds, val_split_ratio=val_split_ratio,partition='test')
+    with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+        list(tqdm(executor.map(proc, test_locations), total=len(test_locations)))
 
 
 
@@ -327,12 +313,16 @@ def main():
         
     road_density_ratio = 0.0005 # minimum average road density in patch to keep it
     threshold_clouds = 0.05 # maximum percentage of roads obscured by clouds
-    n_offsets= 1
+    n_offsets= 0
     tile_size=64
     val_split_ratio = 0.1
     
-    train_locations = [f'east-africa_{i}' for i in range(6)]
-    test_locations = [f'east-africa_{i}' for i in range(6,12)]
+    with open('utils/roads_train_test_locations.json', 'r') as f:
+        train_test_locations = json.load(f)
+
+
+    train_locations = train_test_locations['train_locations']
+    test_locations = train_test_locations['test_locations']
 
 
     process_data(
@@ -345,7 +335,7 @@ def main():
         val_split_ratio=val_split_ratio,
         test_locations=test_locations,
         train_locations=train_locations,
-        num_workers=0
+        num_workers=8
 )
         
 
