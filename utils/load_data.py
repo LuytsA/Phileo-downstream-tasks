@@ -64,8 +64,8 @@ def load_data(*, x="s2", y="area",regions=['north-america', 'east-africa', 'euro
         x_val_files = x_val_files + sorted(glob(os.path.join(folder, f"{region}*val_{x}.npy")))
         y_val_files = y_val_files + sorted(glob(os.path.join(folder, f"{region}*val_label_{y}.npy")))
         
-        x_test_files = x_val_files + sorted(glob(os.path.join(folder, f"{region}*test_{x}.npy")))
-        y_test_files = y_val_files + sorted(glob(os.path.join(folder, f"{region}*test_label_{y}.npy")))
+        x_test_files = x_test_files + sorted(glob(os.path.join(folder, f"{region}*test_{x}.npy")))
+        y_test_files = y_test_files + sorted(glob(os.path.join(folder, f"{region}*test_label_{y}.npy")))
 
 
     x_train = beo.MultiArray([np.load(f,mmap_mode='r') for f in x_train_files])
