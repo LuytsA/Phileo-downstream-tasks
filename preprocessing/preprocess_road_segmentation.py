@@ -8,8 +8,8 @@ import glob
 import buteo as bo
 from matplotlib import pyplot as plt
 import json
-import time
-import multiprocessing as mp
+from datetime import date
+import pandas as pd
 from functools import partial
 import concurrent.futures
 
@@ -238,7 +238,7 @@ def process_data(
         val_split_ratio: float = 0.1,
         test_locations: list = None,
         train_locations: list = None,
-        num_workers: int = 0
+        num_workers: int = None
 ):
     
     '''
@@ -305,6 +305,27 @@ def process_data(
         list(tqdm(executor.map(proc, test_locations), total=len(test_locations)))
 
 
+    # merge all metadata created
+    metadata = glob.glob(f'{folder_dst}/metadata/**.json')
+    metadata_merged = {}
+    for f in metadata:
+        with open(f, 'r') as p:
+            m = json.load(p) 
+            tile = m.pop('tile',f)
+            metadata_merged[tile] = m
+        os.remove(f)
+    with open(os.path.join(folder_dst, 'metadata', 'tiles_metadata.json'), 'w') as fp:
+        json.dump(metadata_merged, fp)
+
+    # create csv for datasplitting protocol
+    files = glob.glob(os.path.join(folder_dst, '**_train_s2.npy'))
+    info = pd.DataFrame()
+    info['samples'] = []
+    for f in files:
+        arr = np.load(f,mmap_mode='r')
+        info.loc[f] = arr.shape[0]
+    file_name = f'{folder_dst}/metadata/{date.today().strftime("%d%m%Y")}_npy_file_info.csv'
+    info.to_csv(file_name)
 
 def main():
     # REGIONS =['east-africa', 'europe','eq-guinea', 'japan','south-america', 'north-america', 'nigeria', 'senegal']
@@ -335,7 +356,6 @@ def main():
         val_split_ratio=val_split_ratio,
         test_locations=test_locations,
         train_locations=train_locations,
-        num_workers=8
 )
         
 
