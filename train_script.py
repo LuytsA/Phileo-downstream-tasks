@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torchmetrics
 
-import buteo as beo
-import numpy as np
 from datetime import date
 
 import sys; sys.path.append("../")
@@ -23,10 +21,11 @@ if __name__ == "__main__":
     LEARNING_RATE = 0.0001
     NUM_EPOCHS = 250
     BATCH_SIZE = 64
+    num_workers = 6
     REGIONS =['']#, 'east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal']
     DATA_FOLDER = '/home/lcamilleri/data/s12_buildings/data_patches/'
-    model = SimpleUnet() #ViT(chw=(10, 64, 64),  n_patches=4, n_blocks=2, hidden_d=768, n_heads=12)# SimpleUnet(input_dim=10, output_dim=1)
-    criterion = nn.MSELoss() # vit_mse_losses(n_patches=4)
+    model = ViT(chw=(10, 64, 64),  n_patches=4, n_blocks=2, hidden_d=768, n_heads=12)# SimpleUnet(input_dim=10, output_dim=1) #ViT(chw=(10, 64, 64),  n_patches=4, n_blocks=2, hidden_d=768, n_heads=12)# SimpleUnet(input_dim=10, output_dim=1) # SimpleUnet()
+    criterion = vit_mse_losses(n_patches=4) # nn.MSELoss() # vit_mse_losses(n_patches=4)
     lr_scheduler = 'reduce_on_plateau' # None, 'reduce_on_plateau', 'cosine_annealing'
     
     NAME = model.__class__.__name__
@@ -42,7 +41,7 @@ if __name__ == "__main__":
                                                                                      split_percentage=1)
     dl_train, dl_val, dl_test = load_data(x_train, y_train, x_val, y_val, x_test, y_test,
                                           with_augmentations=False,
-                                          num_workers=0,
+                                          num_workers=num_workers,
                                           batch_size=BATCH_SIZE,
                                           encoder_only=False,
                                           )
