@@ -2,6 +2,9 @@
 import os
 from tqdm import tqdm
 from matplotlib import pyplot as plt
+import matplotlib
+import PyQt5
+matplotlib.use('QtAgg')
 
 # PyTorch
 import torch
@@ -9,11 +12,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler, autocast
 import numpy as np
-from .training_utils import patience_calculator, visualise
+
 
 # utils
 from utils import visualise
 from models.model_ViT import unpatchify
+
 
 def training_loop(
     num_epochs: int,
@@ -65,9 +69,6 @@ def training_loop(
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1, 2, 3, 4, 5], gamma=(10))
         warmup = True
 
-
-
-
     best_epoch = 0
     best_loss = None
     best_model_state = model.state_dict().copy()
@@ -81,6 +82,7 @@ def training_loop(
 
     # Training loop
     for epoch in range(num_epochs):
+
         if epoch == 5 and lr_scheduler == 'reduce_on_plateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=10, min_lr=1e-6)
             warmup = False
@@ -136,7 +138,7 @@ def training_loop(
                     num_visualisations = 10
                     if num_visualisations > len(val_loader):
                         num_visualisations = len(val_loader)
-                    # vis_batches = [i*len(val_loader)//(num_visualisations+1) for i in range(num_visualisations)]
+                    vis_batches = [i*len(val_loader)//(num_visualisations+1) for i in range(num_visualisations)]
                     vis_images = []
                     vis_labels = []
                     vis_preds = []
@@ -156,16 +158,13 @@ def training_loop(
                             outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
                                                  n_patches=4, tensors=outputs)
 
-                        vis_images.append(images.detach().cpu().numpy()[0])
-                        vis_labels.append(labels.detach().cpu().numpy()[0])
-                        vis_preds.append(outputs.detach().cpu().numpy()[0])
+                        if j in vis_batches:
+                            vis_images.append(images.detach().cpu().numpy()[0])
+                            vis_labels.append(labels.detach().cpu().numpy()[0])
+                            vis_preds.append(outputs.detach().cpu().numpy()[0])
                         
                         for metric in metrics:
                             val_metrics_values[metric.__name__] += metric(outputs, labels)
-                        
-                    if visualise_validation:
-
-                        visualise(vis_images, np.squeeze(vis_labels),np.squeeze(vis_preds), images=num_visualisations, channel_first=True, vmin=0,vmax=1, save_path=os.path.join(save_dir, f"val_pred_{epoch}.png"))
 
                 # Append val_loss to the train_pbar
                 train_pbar.set_postfix({
@@ -211,18 +210,28 @@ def training_loop(
                     epochs_no_improve += 1
                 torch.save(best_model_state, os.path.join(out_folder, f"{name}_last.pt"))
 
-                # visualize loss & lr curves
-                e.append(epoch)
-                plt.plot(e, tl, label='Training Loss', )
-                plt.plot(e, vl, label='Validation Loss')
-                plt.legend()
-                plt.savefig(os.path.join(out_folder, f"loss.png"))
-                plt.close()
-                plt.plot(e, lr, label='Learning Rate')
-                plt.legend()
-                plt.savefig(os.path.join(out_folder, f"lr.png"))
-                plt.close()
+        # visualize loss & lr curves
+        e.append(epoch)
 
+        fig = plt.figure()
+        plt.plot(e, tl, label='Training Loss', )
+        plt.plot(e, vl, label='Validation Loss')
+        plt.legend()
+        plt.savefig(os.path.join(out_folder, f"loss.png"))
+        plt.close('all')
+        fig = plt.figure()
+        plt.plot(e, lr, label='Learning Rate')
+        plt.legend()
+        plt.savefig(os.path.join(out_folder, f"lr.png"))
+        plt.close('all')
+
+        if visualise_validation:
+            visualise(vis_images, np.squeeze(vis_labels), np.squeeze(vis_preds), images=num_visualisations,
+                      channel_first=True, vmin=0, vmax=1, save_path=os.path.join(save_dir, f"val_pred_{epoch}.png"))
+
+
+
+        #
         # # Early stopping
         # if epochs_no_improve == patience_calculator(epoch, t_0, t_mult, max_patience):
         #     print(f'Early stopping triggered after {epoch + 1} epochs.')

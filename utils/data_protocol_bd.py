@@ -137,4 +137,4 @@ def protocol_regions(folder: str, regions: list = None):
 
 
 if __name__ == '__main__':
-    protocol_2('/home/lcamilleri/data/s12_buildings/data_patches/')
+    protocol_split('/home/lcamilleri/data/s12_buildings/data_patches/')
