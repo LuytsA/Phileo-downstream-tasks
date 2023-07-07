@@ -48,7 +48,7 @@ def load_data(x_train, y_train, x_val, y_val, x_test, y_test, with_augmentations
     """
     Loads the data from the data folder.
     """
-
+    
     if with_augmentations:
         ds_train = beo.DatasetAugmentation(
             x_train, y_train,
