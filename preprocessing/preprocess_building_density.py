@@ -1,9 +1,12 @@
 import os
+from datetime import date
 from glob import glob
 
 import buteo as beo
 import numpy as np
 from tqdm import tqdm
+import json
+import pandas as pd
 
 TILE_PATHS = [
     { "path": "data_raw/egypt/", "name": "EGY1" },
@@ -39,8 +42,6 @@ def normalize_y(y: np.ndarray) -> np.ndarray:
     y = y.astype(np.float32, copy=False)
     y_norm = np.empty_like(y, dtype=np.float32)
     np.divide(y, 100.0, out=y_norm)
-    if y_norm.ndim != 3:
-        y_norm = np.squeeze(y_norm, axis=-1)
     return y_norm
 
 
@@ -55,6 +56,20 @@ def preprocess_image_to_patches(
         train_locations: list = None,
         normalize_label: bool = True
 ) -> None:
+
+    d = {'folder_src': folder_src,
+         'folder_dst': folder_dst,
+         'overlaps': overlaps,
+         'patch_size': patch_size,
+         'val_split_ratio': val_split_ratio,
+         'building_density_ratio': building_density_ratio}
+
+    file_name = f'{folder_dst}/{date.today().strftime("%d%m%Y")}_meta_data.json'
+    with open(file_name, "w") as file:
+        json.dump(d, file)
+
+    info = pd.DataFrame()
+    info['samples'] = []
 
     if train_locations is None:
         # If empty, all locations are used.
@@ -148,7 +163,8 @@ def preprocess_image_to_patches(
             if patches_y_val.shape[0] != 0:
                 np.save(os.path.join(folder_dst, f"{location}_{fid}_val_label_y.npy"), patches_y_val)
 
-        np.save(os.path.join(folder_dst, f"{location}_{fid}_{TARGET}_label_y.npy"), patches_label)
+        if patches_label.shape[0] != 0:
+            np.save(os.path.join(folder_dst, f"{location}_{fid}_{TARGET}_label_y.npy"), patches_label)
 
         patches_s2 = beo.array_to_patches(
             beo.raster_to_array(path_s2),
@@ -166,13 +182,20 @@ def preprocess_image_to_patches(
             if patches_s2_val.shape[0] != 0:
                 np.save(os.path.join(folder_dst, f"{location}_{fid}_val_s2.npy"), patches_s2_val)
 
-        np.save(os.path.join(folder_dst, f"{location}_{fid}_{TARGET}_s2.npy"), patches_s2)
+        if patches_s2.shape[0] != 0:
+            np.save(os.path.join(folder_dst, f"{location}_{fid}_{TARGET}_s2.npy"), patches_s2)
+            if TARGET == 'train':
+                info.loc[f"{location}_{fid}_{TARGET}_s2.npy"] = patches_label.shape[0]
 
         assert patches_y_val.shape[0] == patches_s2_val.shape[0], "Number of patches do not match."
         assert patches_label.shape[0] == patches_s2.shape[0], "Number of patches do not match."
 
         processed += 1
         print(f"Processed {location}_{fid} ({processed}/{total}).")
+
+    file_name = f'{folder_dst}/{date.today().strftime("%d%m%Y")}_npy_file_info.csv'
+    info.to_csv(file_name)
+
 
 
 def preprocess_tile_to_image(folder_src: str,

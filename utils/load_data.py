@@ -44,41 +44,11 @@ def callback_decoder(x, y):
     return x, y
 
 
-def load_data(*, x="s2", y="area",regions=['north-america', 'east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal'], with_augmentations=False, num_workers=0, batch_size=16, folder="../data/patches/", encoder_only=False):
+def load_data(x_train, y_train, x_val, y_val, x_test, y_test, with_augmentations=False, num_workers=0, batch_size=16, encoder_only=False):
     """
     Loads the data from the data folder.
     """
-
-    # load the data
-    x_train_files =[]
-    y_train_files =[]
-    x_val_files =[]
-    y_val_files =[]
-    x_test_files =[]
-    y_test_files =[]
     
-    for region in regions:
-        x_train_files = x_train_files + sorted(glob(os.path.join(folder, f"{region}*train_{x}.npy")))
-        y_train_files = y_train_files + sorted(glob(os.path.join(folder, f"{region}*train_label_{y}.npy")))
-
-        x_val_files = x_val_files + sorted(glob(os.path.join(folder, f"{region}*val_{x}.npy")))
-        y_val_files = y_val_files + sorted(glob(os.path.join(folder, f"{region}*val_label_{y}.npy")))
-        
-        x_test_files = x_test_files + sorted(glob(os.path.join(folder, f"{region}*test_{x}.npy")))
-        y_test_files = y_test_files + sorted(glob(os.path.join(folder, f"{region}*test_label_{y}.npy")))
-
-
-    x_train = beo.MultiArray([np.load(f,mmap_mode='r') for f in x_train_files])
-    y_train = beo.MultiArray([np.load(f,mmap_mode='r') for f in y_train_files])
-    
-    x_val = beo.MultiArray([np.load(f,mmap_mode='r') for f in x_val_files])
-    y_val = beo.MultiArray([np.load(f,mmap_mode='r') for f in y_val_files])
-    
-    x_test = beo.MultiArray([np.load(f,mmap_mode='r') for f in x_test_files])
-    y_test = beo.MultiArray([np.load(f,mmap_mode='r') for f in y_test_files])
-
-    assert len(x_train) == len(y_train) and len(x_test) == len(y_test) and len(x_val) == len(y_val), "Lengths of x and y do not match."
-
     if with_augmentations:
         ds_train = beo.DatasetAugmentation(
             x_train, y_train,
