@@ -262,7 +262,7 @@ def training_loop(
             outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
                                  n_patches=4, tensors=outputs)
 
-        visualise(images.detach().cpu().numpy(), np.squeeze(labels.detach().cpu().numpy()), np.squeeze(outputs.detach().cpu().numpy()), images=5,
+        visualise(images.detach().cpu().numpy(), np.squeeze(labels.detach().cpu().numpy()), np.squeeze(outputs.detach().cpu().numpy()), images=num_visualisations,
                   channel_first=True, vmin=0, vmax=1, save_path=os.path.join(save_dir, f"test_pred.png"))
 
     # Save the model
