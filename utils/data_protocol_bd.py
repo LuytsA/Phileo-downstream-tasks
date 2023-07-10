@@ -64,6 +64,10 @@ def protocol_split(folder: str, split_percentage: float = 0.2, regions: list = N
     for region in regions:
         mask = [region in f for f in df.iloc[:, 0]]
         df_temp = df[mask].copy()
+        # skip iteration if Region does not belong to current dataset
+        if df_temp.shape[0] == 0:
+            continue
+
         df_temp['cumsum'] = df_temp['samples'].cumsum()
 
         # find row with closest value to the required number of samples
