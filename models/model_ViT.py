@@ -215,6 +215,7 @@ class ViT(nn.Module):
 
         self.vit_encoder = MyViT(chw, n_patches, n_blocks, hidden_d, n_heads)
         self.decoder_pred = nn.Linear(hidden_d, int(1 * patch_size[0] ** 2), bias=True)
+        print()
 
     def forward(self, x):
         x = self.vit_encoder(x)
@@ -236,20 +237,12 @@ class autoencoderViT(nn.Module):
         self.vit_encoder = MyViT(chw, n_patches, n_blocks, hidden_d, n_heads)
         self.vit_decoder = MyViT_decoder(input_d=hidden_d, n_patches=n_patches, n_blocks=decoder_n_blocks, hidden_d=decoder_hidden_d, n_heads=decoder_n_heads)
         self.decoder_pred = nn.Linear(decoder_hidden_d, int(1 * patch_size[0] ** 2), bias=True)  # decoder to patch
-        # self.gelu = nn.GELU()
-        # self.norm_layer = nn.LayerNorm(int(chw[0] * patch_size[0] ** 2))
-        # self.conv = nn.Conv2d(chw[0], 1, bias=True, padding='same', kernel_size=3, stride=1)
 
 
     def forward(self, x):
         x = self.vit_encoder(x)
         x = self.vit_decoder(x)
         x = self.decoder_pred(x)
-        # x = self.gelu(x)
-        # x = self.norm_layer(x)
-        # x = unpatchify(n=x.shape[0],  c=1, h=self.chw[1], w=self.chw[2],
-        #                n_patches=self.n_patches, tensors=x)
-        # x = self.conv(x)
         x = torch.clamp(x, 0.0, 1.0)
         return x
 
