@@ -63,7 +63,7 @@ def protocol_split(folder: str, split_percentage: float = 0.2, regions: list = N
 
     for region in regions:
         mask = [region in f for f in df.iloc[:, 0]]
-        df_temp = df[mask].copy()
+        df_temp = df[mask].copy().reset_index(drop=True)
         # skip iteration if Region does not belong to current dataset
         if df_temp.shape[0] == 0:
             continue
