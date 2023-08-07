@@ -8,7 +8,7 @@ from datetime import date
 
 import sys; sys.path.append("../")
 from models.model_SimpleUNet import SimpleUnet
-from models.model_ViT import vit_mse_losses, ViT
+from models.model_ViT import vit_mse_losses, unpatchify
 
 import os
 from glob import glob
@@ -21,6 +21,8 @@ from utils import (
     visualise
 )
 
+from utils.load_data import callback_decoder
+from torch.utils.data import DataLoader
 def precision_recall(y_pred_classification,y_test_classification):
     diff = y_pred_classification.astype(int)-y_test_classification.astype(int)
     fp = np.count_nonzero(diff == 1) # false positives
@@ -87,7 +89,7 @@ def calculate_metrics(y_pred,y_test, chunks=10, binary_classification_threshold=
 
 
 
-def evaluate_model(model, dataloader_test, device, save_path_visualisations, num_visualisations = 20):
+def evaluate_model(model, dataloader_test, device, save_path_visualisations, num_visualisations = 20, n_patches=None):
     torch.set_default_device(device)
     model.to(device)
     model.eval()
@@ -100,6 +102,11 @@ def evaluate_model(model, dataloader_test, device, save_path_visualisations, num
     with torch.no_grad():
         for inputs,targets in tqdm(dataloader_test):
             batch_pred = model(inputs.to(device))
+
+            if targets.shape != batch_pred.shape:
+                batch_pred = unpatchify(targets.shape[0], targets.shape[1], targets.shape[2], targets.shape[3],
+                                     n_patches=n_patches, tensors=batch_pred)
+
             y_pred.append(batch_pred.detach().cpu().numpy())
             y_true.append(targets.detach().cpu().numpy())
             if len(x_true)<num_visualisations:
@@ -116,15 +123,11 @@ def evaluate_model(model, dataloader_test, device, save_path_visualisations, num
     visualise(x_true, np.squeeze(y_true[y_vis]), np.squeeze(y_pred[y_vis]), images=num_visualisations, channel_first=True, vmin=0, vmax=0.5, save_path=save_path_visualisations)
 
     return metrics
-        
 
+def test():
+    DATA_FOLDER = '/home/lcamilleri/data/s12_buildings/data_patches/'
 
-if __name__ == "__main__":
-
-    DATA_FOLDER = '/home/andreas/vscode/GeoSpatial/Phileo-downstream-tasks/data'
-    REGIONS = ['north-america','east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal']
-
-    model_dir = 'trained_models/07072023_SimpleUnet_NA_reduce_on_plateau'
+    model_dir = '/home/lcamilleri/git_repos/Phileo-downstream-tasks/trained_models/06072023_SimpleUnet_reduce_on_plateau'
     model_name = 'SimpleUnet'
     model = SimpleUnet(input_dim=10, output_dim=1)
 
@@ -132,27 +135,58 @@ if __name__ == "__main__":
     best_sd = torch.load(os.path.join(model_dir, f"{model_name}_best.pt"))
     model.load_state_dict(best_sd)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    
-    # make folder to store results
-    results_dir = f'{model_dir}/results'
-    os.makedirs(results_dir, exist_ok=True)
-    results = {}
 
-    for region in REGIONS:
-        print('Calculating metrics for ',region)
-        x_train, y_train, x_val, y_val, x_test, y_test = data_protocol_bd.protocol_regions(folder=DATA_FOLDER, regions=[region], y='roads')
-        
-        _, _, dl_test = load_data(x_train, y_train, x_val, y_val, x_test, y_test,
-                                            with_augmentations=False,
-                                            num_workers=0,
-                                            batch_size=64,
-                                            encoder_only=False,
-                                            )
-        
-        save_path_visualisations = f"{model_dir}/results/vis_{region}.png"
-        metrics = evaluate_model(model, dl_test, device,save_path_visualisations, num_visualisations=16)
+    REGIONS_BUILDINGS = ['DNK', 'EGY', 'GHA', 'ISR', 'TZA', 'UGA']
+    results = {}
+    for region in REGIONS_BUILDINGS:
+        print('Calculating metrics for ', region)
+        _, _, _, _, x_test, y_test = data_protocol_bd.protocol_regions(folder=DATA_FOLDER, regions=[region], y='y')
+        ds_test = beo.Dataset(x_test, y_test, callback=callback_decoder)
+        dl_test = DataLoader(ds_test, batch_size=6, shuffle=False, pin_memory=True, num_workers=0,
+                             drop_last=True, generator=torch.Generator(device='cuda'))
+
+        save_path_visualisations = f"test_{region}.png"
+        metrics = evaluate_model(model, dl_test, device, save_path_visualisations, num_visualisations=5)
         results[region] = metrics
 
+    print(results)
 
-    with open(f'{results_dir}/{date.today().strftime("%d%m%Y")}_metrics.json', 'w') as fp:
-        json.dump(results, fp)
+
+if __name__ == "__main__":
+    test()
+
+    # DATA_FOLDER = '/home/andreas/vscode/GeoSpatial/Phileo-downstream-tasks/data'
+    # REGIONS = ['north-america','east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal']
+    #
+    # model_dir = 'trained_models/07072023_SimpleUnet_NA_reduce_on_plateau'
+    # model_name = 'SimpleUnet'
+    # model = SimpleUnet(input_dim=10, output_dim=1)
+    #
+    # # load model
+    # best_sd = torch.load(os.path.join(model_dir, f"{model_name}_best.pt"))
+    # model.load_state_dict(best_sd)
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    #
+    # # make folder to store results
+    # results_dir = f'{model_dir}/results'
+    # os.makedirs(results_dir, exist_ok=True)
+    # results = {}
+    #
+    # for region in REGIONS:
+    #     print('Calculating metrics for ',region)
+    #     x_train, y_train, x_val, y_val, x_test, y_test = data_protocol_bd.protocol_regions(folder=DATA_FOLDER, regions=[region], y='roads')
+    #
+    #     _, _, dl_test = load_data(x_train, y_train, x_val, y_val, x_test, y_test,
+    #                                         with_augmentations=False,
+    #                                         num_workers=0,
+    #                                         batch_size=64,
+    #                                         encoder_only=False,
+    #                                         )
+    #
+    #     save_path_visualisations = f"{model_dir}/results/vis_{region}.png"
+    #     metrics = evaluate_model(model, dl_test, device,save_path_visualisations, num_visualisations=16)
+    #     results[region] = metrics
+    #
+    #
+    # with open(f'{results_dir}/{date.today().strftime("%d%m%Y")}_metrics.json', 'w') as fp:
+    #     json.dump(results, fp)

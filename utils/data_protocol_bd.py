@@ -41,7 +41,7 @@ def protocol_all(folder: str, y: str= 'y'):
     return x_train, y_train, x_val, y_val, x_test, y_test
 
 
-def protocol_split(folder: str, split_percentage: float = 0.2, regions: list = None, y: str = 'y'):
+def protocol_split(folder: str, split_percentage: float = 0.1, regions: list = None, y: str = 'y'):
     '''
     Loads a percentage of the data from specified geographic regions.
     '''
@@ -63,7 +63,7 @@ def protocol_split(folder: str, split_percentage: float = 0.2, regions: list = N
 
     for region in regions:
         mask = [region in f for f in df.iloc[:, 0]]
-        df_temp = df[mask].copy()
+        df_temp = df[mask].copy().reset_index(drop=True)
         # skip iteration if Region does not belong to current dataset
         if df_temp.shape[0] == 0:
             continue

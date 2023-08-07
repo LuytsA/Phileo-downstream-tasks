@@ -33,7 +33,8 @@ def training_loop(
     name="model",
     out_folder="trained_models/",
     predict_func=None,
-    visualise_validation=True
+    visualise_validation=True,
+    n_patches=None
 ) -> None:
         
     torch.set_default_device(device)
@@ -113,6 +114,10 @@ def training_loop(
                 scaler.step(optimizer)
                 scaler.update()
 
+                # # Update the scheduler
+                if lr_scheduler == 'cosine_annealing':
+                    scheduler.step()
+
             train_loss += loss.item()
 
             for metric in metrics:
@@ -137,7 +142,7 @@ def training_loop(
                     # # visualise some validation results
                     num_visualisations = 10
                     if num_visualisations > len(val_loader):
-                        num_visualisations = len(val_loader)
+                        num_visualisations = len(val_loader) - 1
                     vis_batches = [i*len(val_loader)//(num_visualisations+1) for i in range(num_visualisations)]
                     vis_images = []
                     vis_labels = []
@@ -156,13 +161,13 @@ def training_loop(
 
                         if labels.shape != outputs.shape:
                             outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
-                                                 n_patches=4, tensors=outputs)
+                                                 n_patches=n_patches, tensors=outputs)
 
                         if j in vis_batches:
                             vis_images.append(images.detach().cpu().numpy()[0])
                             vis_labels.append(labels.detach().cpu().numpy()[0])
                             vis_preds.append(outputs.detach().cpu().numpy()[0])
-                        
+
                         for metric in metrics:
                             val_metrics_values[metric.__name__] += metric(outputs, labels)
 
@@ -179,9 +184,7 @@ def training_loop(
                 lr.append(optimizer.param_groups[0]['lr'])
 
                 # # Update the scheduler
-                if lr_scheduler == 'cosine_annealing':
-                    scheduler.step()
-                elif lr_scheduler == 'reduce_on_plateau':
+                if lr_scheduler == 'reduce_on_plateau':
                     if warmup:
                         scheduler.step()
                     else:
@@ -192,7 +195,7 @@ def training_loop(
                     best_loss = val_loss
                     best_model_state = model.state_dict().copy()
                     torch.save(best_model_state, os.path.join(out_folder, f"{name}_best.pt"))
-                    
+
                     if predict_func is not None:
                         predict_func(model, epoch + 1)
 
@@ -232,10 +235,10 @@ def training_loop(
 
 
         #
-        # # Early stopping
-        # if epochs_no_improve == patience_calculator(epoch, t_0, t_mult, max_patience):
-        #     print(f'Early stopping triggered after {epoch + 1} epochs.')
-        #     break
+        # Early stopping
+        if epochs_no_improve == 50:
+            print(f'Early stopping triggered after {epoch + 1} epochs.')
+            break
 
     # Load the best weights
     model.load_state_dict(best_model_state)
@@ -260,7 +263,7 @@ def training_loop(
         print(f"Test Accuracy: {test_loss / (k + 1):.4f}")
         if labels.shape != outputs.shape:
             outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
-                                 n_patches=4, tensors=outputs)
+                                 n_patches=n_patches, tensors=outputs)
 
         visualise(images.detach().cpu().numpy(), np.squeeze(labels.detach().cpu().numpy()), np.squeeze(outputs.detach().cpu().numpy()), images=num_visualisations,
                   channel_first=True, vmin=0, vmax=1, save_path=os.path.join(save_dir, f"test_pred.png"))
