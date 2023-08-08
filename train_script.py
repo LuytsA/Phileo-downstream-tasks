@@ -9,7 +9,7 @@ from datetime import date
 
 import sys; sys.path.append("../")
 from models.model_ViT import vit_mse_losses
-from mae_pretraining.models.models_vit_timm import Vit_basic
+from models.models_vit_timm import Vit_basic
 
 
 from utils import (
