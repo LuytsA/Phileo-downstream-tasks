@@ -9,6 +9,9 @@ from datetime import date
 import sys; sys.path.append("../")
 from models.model_SimpleUNet import SimpleUnet
 from models.model_ViT import vit_mse_losses, ViT
+from models.model_ConvNext import ConvNextV2Unet_tiny, ConvNextV2Unet_atto, ConvNextV2Unet_pico, ConvNextV2Unet_base
+from models.model_Diamond import DiamondNet
+from models.model_CoreCNN import CoreUnet_tiny
 
 import os
 from glob import glob
@@ -124,9 +127,17 @@ if __name__ == "__main__":
     DATA_FOLDER = '/home/andreas/vscode/GeoSpatial/Phileo-downstream-tasks/data'
     REGIONS = ['north-america','east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal']
 
-    model_dir = 'trained_models/07072023_SimpleUnet_NA_reduce_on_plateau'
-    model_name = 'SimpleUnet'
-    model = SimpleUnet(input_dim=10, output_dim=1)
+    model_dir = 'trained_models/04082023_CoreUnet'
+    model_name = 'CoreUnet'
+    model = CoreUnet_tiny(input_dim=10, output_dim=1)
+    #DiamondNet(
+    #     input_dim=10,
+    #     output_dim=1,
+    #     input_size=64,
+    #     depths=[3, 3, 3, 3],
+    #     dims=[40, 80, 160, 320],
+
+    # )
 
     # load model
     best_sd = torch.load(os.path.join(model_dir, f"{model_name}_best.pt"))
