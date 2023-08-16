@@ -12,11 +12,17 @@ from models.model_ViT import vit_mse_losses, ViT
 from models.model_ConvNext import ConvNextV2Unet_tiny, ConvNextV2Unet_atto, ConvNextV2Unet_pico, ConvNextV2Unet_base
 from models.model_Diamond import DiamondNet
 from models.model_CoreCNN import CoreUnet_tiny
+from models.model_MixerMLP import MLPMixer
+from models.model_VisionTransformer import ViT
 
 import os
 from glob import glob
 from tqdm import tqdm
 import json
+import config_lc
+import pandas as pd
+import seaborn as sn
+import matplotlib.pyplot as plt 
 
 from utils import (
     load_data,
@@ -89,6 +95,55 @@ def calculate_metrics(y_pred,y_test, chunks=10, binary_classification_threshold=
     return meta_data
 
 
+def evaluate_model_landcover(model, dataloader_test, device, save_path_visualisations, num_visualisations = 20):
+    num_classes= len(config_lc.lc_model_map)
+    confmat = torchmetrics.ConfusionMatrix(task="multiclass", num_classes=num_classes).to('cpu')
+    running_conf = np.zeros((num_classes,num_classes))
+
+    torch.set_default_device(device)
+    model.to(device)
+    model.eval()
+
+    y_pred = []
+    x_true = []
+    y_true = []
+    if num_visualisations > len(dataloader_test):
+        num_visualisations = len(dataloader_test)
+    with torch.no_grad():
+        for inputs,targets in tqdm(dataloader_test):
+            batch_pred = model(inputs.to(device)).detach().cpu()
+            if len(x_true)<num_visualisations:
+                x_true.append(inputs[:1, 0:3, :, :].detach().cpu().numpy()) # only a few per batch to avoid memory issues
+                y_pred.append(batch_pred[:1].numpy().argmax(axis=1))
+                y_true.append(targets[:1].detach().cpu().numpy())
+            running_conf += confmat(batch_pred.argmax(axis=1),torch.squeeze(targets.detach().cpu())).numpy()
+
+    y_pred = np.concatenate(y_pred,axis=0)
+    x_true = np.concatenate(x_true,axis=0)
+    y_true = np.concatenate(y_true,axis=0)
+
+    total = np.sum(running_conf)
+    tp = running_conf.trace()
+
+    s = np.sum(running_conf, axis=1, keepdims=True)
+    s[s==0]=1
+    running_conf = running_conf/s
+    
+    plt.figure(figsize = (12,9))
+    ax = sn.heatmap(running_conf, annot=True, fmt='.2f')
+    ax.xaxis.set_ticklabels(config_lc.lc_raw_classes.values(),rotation = 90)
+    ax.yaxis.set_ticklabels(config_lc.lc_raw_classes.values(),rotation = 0)
+    plt.savefig(save_path_visualisations.replace('vis','cm'))
+    
+    print(x_true[0].shape, y_true[0].shape, y_pred[0].shape)
+
+    batch_size = dataloader_test.batch_size
+    y_vis = [i*batch_size for i in range(0,num_visualisations)]
+    visualise(x_true, np.squeeze(y_true), np.squeeze(y_pred), images=num_visualisations, channel_first=True, vmin=0, vmax=0.5, save_path=save_path_visualisations, for_landcover=True)
+
+    metrics = {'acc':tp/total, 'total_pixels':total}
+    return metrics
+
 
 def evaluate_model(model, dataloader_test, device, save_path_visualisations, num_visualisations = 20):
     torch.set_default_device(device)
@@ -124,15 +179,22 @@ def evaluate_model(model, dataloader_test, device, save_path_visualisations, num
 
 if __name__ == "__main__":
 
-    DATA_FOLDER = '/home/andreas/vscode/GeoSpatial/Phileo-downstream-tasks/data'
-    REGIONS = ['north-america','east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal']
+    DATA_FOLDER = '/home/andreas/vscode/GeoSpatial/Phileo-downstream-tasks/data_landcover'
+    REGIONS = ['eq-guinea','east-africa','north-america', 'europe', 'japan','south-america', 'nigeria', 'senegal'] #['north-america']#, ['east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal'] # 'north-america',
 
-    model_dir = 'trained_models/04082023_CoreUnet'
-    model_name = 'CoreUnet'
-    model = CoreUnet_tiny(input_dim=10, output_dim=1)
-    #DiamondNet(
+    model_dir = 'trained_models/16082023_MLPMixer_split0.1' #'trained_models/08082023_CoreUnet'
+    model_name = 'MLPMixer'#'CoreUnet'
+    model = MLPMixer(
+        chw=(10, 64, 64),
+        output_dim=11,
+        patch_size=8,
+        embed_dim=1024,
+        dim=512,
+        depth=6,
+    )
+    # model = DiamondNet(
     #     input_dim=10,
-    #     output_dim=1,
+    #     output_dim=11,
     #     input_size=64,
     #     depths=[3, 3, 3, 3],
     #     dims=[40, 80, 160, 320],
@@ -151,17 +213,17 @@ if __name__ == "__main__":
 
     for region in REGIONS:
         print('Calculating metrics for ',region)
-        x_train, y_train, x_val, y_val, x_test, y_test = data_protocol_bd.protocol_regions(folder=DATA_FOLDER, regions=[region], y='roads')
+        x_train, y_train, x_val, y_val, x_test, y_test = data_protocol_bd.protocol_regions(folder=DATA_FOLDER, regions=[region], y='lc')
         
         _, _, dl_test = load_data(x_train, y_train, x_val, y_val, x_test, y_test,
                                             with_augmentations=False,
-                                            num_workers=0,
+                                            num_workers=8,
                                             batch_size=64,
                                             encoder_only=False,
                                             )
         
         save_path_visualisations = f"{model_dir}/results/vis_{region}.png"
-        metrics = evaluate_model(model, dl_test, device,save_path_visualisations, num_visualisations=16)
+        metrics = evaluate_model_landcover(model, dl_test, device,save_path_visualisations, num_visualisations=16)
         results[region] = metrics
 
 

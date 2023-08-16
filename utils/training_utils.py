@@ -4,12 +4,15 @@ import torch.nn.functional as F
 from torchvision.transforms import Resize
 import random
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib
 import gc
 gc.collect(2)
 import numpy as np
 import buteo as beo
 import os
-
+import sys; sys.path.append("..")
+import config_lc
 
 def patience_calculator(epoch, t_0, t_m, max_patience=50):
     """ Calculate the patience for the scheduler. """
@@ -74,14 +77,31 @@ def render_s2_as_rgb(arr, channel_first=False):
     return rgb_slice
 
 
-def visualise(x, y, y_pred=None, images=5, channel_first=False, vmin=0, vmax=1, save_path=None):
+def visualise(x, y, y_pred=None, images=5, channel_first=False, vmin=0, vmax=1, save_path=None, for_landcover=False):
     rows = images
+    cmap = 'magma'
+    # print(x[0].shape,y[0].shape, y_pred[0].shape)
     if y_pred is None:
         columns = 2
     else:
         columns = 3
     i = 0
     fig = plt.figure(figsize=(10 * columns, 10 * rows))
+
+
+    if for_landcover:
+        lc_map_names = config_lc.lc_raw_classes
+        lc_map = config_lc.lc_model_map
+        lc_map_inverted = {v:k for k,v in zip(lc_map.keys(),lc_map.values())}
+        vmax=len(lc_map)
+
+        # d = 1 if channel_first else -1
+        # # y= y.argmax(axis=d)
+        # if y_pred is not None:
+        #     y_pred = y_pred.argmax(axis=d)
+        cmap = (matplotlib.colors.ListedColormap(config_lc.lc_color_map.values()))
+        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+
 
     for idx in range(0, images):
         arr = x[idx]
@@ -95,14 +115,20 @@ def visualise(x, y, y_pred=None, images=5, channel_first=False, vmin=0, vmax=1, 
 
         i = i + 1
         fig.add_subplot(rows, columns, i)
-        plt.imshow(y[idx], vmin=vmin, vmax=vmax, cmap='magma')
+        plt.imshow(y[idx].squeeze(), vmin=vmin, vmax=vmax, cmap=cmap)
+        if for_landcover:
+            patches = [mpatches.Patch(color=cmap(norm(u)), label=lc_map_names[lc_map_inverted[u]]) for u in np.unique(y[idx])]
+            plt.legend(handles=patches)
         plt.axis('on')
         plt.grid()
 
         if y_pred is not None:
             i = i + 1
             fig.add_subplot(rows, columns, i)
-            plt.imshow(y_pred[idx], vmin=vmin, vmax=vmax, cmap='magma')
+            plt.imshow(y_pred[idx].squeeze(), vmin=vmin, vmax=vmax, cmap=cmap)
+            if for_landcover:
+                patches = [mpatches.Patch(color=cmap(norm(u)), label=lc_map_names[lc_map_inverted[u]]) for u in np.unique(y_pred[idx])]
+                plt.legend(handles=patches)
             plt.axis('on')
             plt.grid()
 
