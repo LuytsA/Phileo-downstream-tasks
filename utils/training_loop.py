@@ -159,7 +159,9 @@ def training_loop(
                         if j in vis_batches:
                             vis_images.append(images.detach().cpu().numpy()[0])
                             vis_labels.append(labels.detach().cpu().numpy()[0])#.argmax(axis=0))
-                            vis_preds.append(outputs.detach().cpu().numpy()[0].argmax(axis=0))
+
+                            output_vis = outputs.detach().cpu().numpy()[0].argmax(axis=0) if CrossEntropyLoss_used else outputs.detach().cpu().numpy()[0]
+                            vis_preds.append(output_vis)
 
                         if CrossEntropyLoss_used:
                             outputs = outputs.flatten(start_dim=2)
