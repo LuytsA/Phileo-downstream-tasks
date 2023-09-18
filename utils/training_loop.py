@@ -52,6 +52,7 @@ def training_loop(
     # Loss and optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, eps=1e-06)
     scaler = GradScaler()
+    CrossEntropyLoss_used = type(criterion) is type(nn.CrossEntropyLoss()) # in this case we need to flatten all the logits before feeding it to the loss
 
     # Save the initial learning rate in optimizer's param_groups
     for param_group in optimizer.param_groups:
@@ -107,6 +108,11 @@ def training_loop(
             # Cast to bfloat16
             with autocast(dtype=torch.float16):
                 outputs = model(images)
+
+                if CrossEntropyLoss_used:
+                    outputs = outputs.flatten(start_dim=2)
+                    labels = labels.flatten(start_dim=1).squeeze()
+
                 loss = criterion(outputs, labels)
 
                 scaler.scale(loss).backward()
@@ -150,19 +156,23 @@ def training_loop(
                         labels = labels.to(device)
 
                         outputs = model(images)
+                        if j in vis_batches:
+                            vis_images.append(images.detach().cpu().numpy()[0])
+                            vis_labels.append(labels.detach().cpu().numpy()[0])#.argmax(axis=0))
+                            vis_preds.append(outputs.detach().cpu().numpy()[0].argmax(axis=0))
+
+                        if CrossEntropyLoss_used:
+                            outputs = outputs.flatten(start_dim=2)
+                            labels = labels.flatten(start_dim=1).squeeze()
 
                         loss = criterion(outputs, labels)
                         val_loss += loss.item()
 
-                        if labels.shape != outputs.shape:
-                            outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
-                                                 n_patches=4, tensors=outputs)
+                        # if (labels.shape != outputs.shape) and not CrossEntropyLoss_used:
+                        #     outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
+                        #                          n_patches=4, tensors=outputs)
 
-                        if j in vis_batches:
-                            vis_images.append(images.detach().cpu().numpy()[0])
-                            vis_labels.append(labels.detach().cpu().numpy()[0])
-                            vis_preds.append(outputs.detach().cpu().numpy()[0])
-                        
+
                         for metric in metrics:
                             val_metrics_values[metric.__name__] += metric(outputs, labels)
 
@@ -226,8 +236,8 @@ def training_loop(
         plt.close('all')
 
         if visualise_validation:
-            visualise(vis_images, np.squeeze(vis_labels), np.squeeze(vis_preds), images=num_visualisations,
-                      channel_first=True, vmin=0, vmax=1, save_path=os.path.join(save_dir, f"val_pred_{epoch}.png"))
+            visualise(vis_images, vis_labels, vis_preds, images=num_visualisations, for_landcover=CrossEntropyLoss_used,
+                      channel_first=True, vmin=0, vmax=0.75, save_path=os.path.join(save_dir, f"val_pred_{epoch}.png"))
 
 
 
@@ -237,33 +247,33 @@ def training_loop(
         #     print(f'Early stopping triggered after {epoch + 1} epochs.')
         #     break
 
-    # Load the best weights
-    model.load_state_dict(best_model_state)
+    # # Load the best weights
+    # model.load_state_dict(best_model_state)
 
-    print("Finished Training. Best epoch: ", best_epoch + 1)
-    print("")
-    print("Starting Testing...")
-    model.eval()
+    # print("Finished Training. Best epoch: ", best_epoch + 1)
+    # print("")
+    # print("Starting Testing...")
+    # model.eval()
 
-    # Test the model
-    with torch.no_grad():
-        test_loss = 0
-        for k, (images, labels) in enumerate(test_loader):
-            images = images.to(device)
-            labels = labels.to(device)
+    # # Test the model
+    # with torch.no_grad():
+    #     test_loss = 0
+    #     for k, (images, labels) in enumerate(test_loader):
+    #         images = images.to(device)
+    #         labels = labels.to(device)
 
-            outputs = model(images)
+    #         outputs = model(images)
 
-            loss = criterion(outputs, labels)
-            test_loss += loss.item()
+    #         loss = criterion(outputs, labels)
+    #         test_loss += loss.item()
 
-        print(f"Test Accuracy: {test_loss / (k + 1):.4f}")
-        if labels.shape != outputs.shape:
-            outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
-                                 n_patches=4, tensors=outputs)
+    #     print(f"Test Accuracy: {test_loss / (k + 1):.4f}")
+    #     if labels.shape != outputs.shape:
+    #         outputs = unpatchify(labels.shape[0], labels.shape[1], labels.shape[2], labels.shape[3],
+    #                              n_patches=4, tensors=outputs)
 
-        visualise(images.detach().cpu().numpy(), np.squeeze(labels.detach().cpu().numpy()), np.squeeze(outputs.detach().cpu().numpy()), images=num_visualisations,
-                  channel_first=True, vmin=0, vmax=1, save_path=os.path.join(save_dir, f"test_pred.png"))
+    #     visualise(images.detach().cpu().numpy(), np.squeeze(labels.detach().cpu().numpy()), np.squeeze(outputs.detach().cpu().numpy()), images=num_visualisations,
+    #               channel_first=True, vmin=0, vmax=1, save_path=os.path.join(save_dir, f"test_pred.png"))
 
-    # Save the model
-    torch.save(best_model_state, os.path.join(out_folder, f"{name}.pt"))
+    # # Save the model
+    # torch.save(best_model_state, os.path.join(out_folder, f"{name}.pt"))

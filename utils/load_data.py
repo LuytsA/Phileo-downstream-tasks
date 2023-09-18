@@ -1,7 +1,7 @@
 # Standard Library
 import os
 from glob import glob
-
+import config_lc
 # External Libraries
 import buteo as beo
 import numpy as np
@@ -10,12 +10,22 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+lc_map = config_lc.lc_model_map #{10: 0, 20:1,30:2,40:3,50:4,60:5, 70:6,80:7,90:8, 95:9,100:10}
 
 def callback_preprocess(x, y):
     x_norm = np.empty_like(x, dtype=np.float32)
     np.divide(x, 10000.0, out=x_norm)
 
     y = y.astype(np.float32, copy=False)
+
+    return x_norm, y
+
+def callback_preprocess_landcover(x, y):
+    x_norm = np.empty_like(x, dtype=np.float32)
+    np.divide(x, 10000.0, out=x_norm)
+
+    u,inv = np.unique(y,return_inverse = True)
+    y = np.array([lc_map[x] for x in u])[inv].reshape(y.shape)
 
     return x_norm, y
 
@@ -38,6 +48,7 @@ def callback_encoder(x, y):
     return x, y
 
 def callback_decoder(x, y):
+    # x, y = callback_preprocess_landcover(x, y)
     x, y = callback_preprocess(x, y)
     x, y = callback_postprocess_decoder(x, y)
 
@@ -52,13 +63,15 @@ def load_data(x_train, y_train, x_val, y_val, x_test, y_test, with_augmentations
     if with_augmentations:
         ds_train = beo.DatasetAugmentation(
             x_train, y_train,
-            callback_pre_augmentation=callback_preprocess,
+            callback_pre_augmentation=callback_preprocess_landcover,
             callback_post_augmentation=callback_postprocess_encoder if encoder_only else callback_postprocess_decoder,
             augmentations=[
                 beo.AugmentationRotationXY(p=0.2, inplace=True),
                 beo.AugmentationMirrorXY(p=0.2, inplace=True),
                 beo.AugmentationCutmix(p=0.2, inplace=True),
                 beo.AugmentationNoiseNormal(p=0.2, inplace=True),
+                # beo.AugmentationBlur(p=0.2, inplace=True),
+                beo.AugmentationSharpen(p=0.2, inplace=True),
             ]
         )
     else:

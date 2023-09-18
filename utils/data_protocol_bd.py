@@ -11,6 +11,27 @@ REGIONS_BUILDINGS = ['DNK', 'EGY', 'GHA', 'ISR', 'TZA', 'UGA']
 REGIONS_ROADS = ['north-america','east-africa', 'europe','eq-guinea', 'japan','south-america', 'nigeria', 'senegal']
 REGIONS = REGIONS_ROADS + REGIONS_BUILDINGS
 
+def sanity_check_labels_exist(x_files,y_files, y):
+        existing_x = [] 
+        existing_y = []
+        counter_missing = 0
+
+        assert len(x_files)==len(y_files)
+        for x_path,y_path in zip(x_files,y_files):
+            
+            exists = os.path.exists(y_path)
+            if exists:
+                existing_x.append(x_path)
+                existing_y.append(y_path)
+            else:
+                counter_missing+=1
+
+        if counter_missing>0:
+            print(f'WARNING: {counter_missing} label(s) not found')
+            missing = [y_f for y_f in y_files if y_f not in existing_y]
+            print(f'Showing up to 5 missing files: {missing[:5]}')
+
+        return existing_x, existing_y
 
 def protocol_all(folder: str, y: str= 'y'):
     """
@@ -25,6 +46,10 @@ def protocol_all(folder: str, y: str= 'y'):
 
     x_test_files = sorted(glob(os.path.join(folder, f"*test_s2.npy")))
     y_test_files = sorted(glob(os.path.join(folder, f"*test_label_{y}.npy")))
+
+    x_train_files,y_train_files =  sanity_check_labels_exist(x_train_files,y_train_files, y)
+    x_val_files,y_val_files =  sanity_check_labels_exist(x_val_files,y_val_files, y)
+    x_test_files,y_test_files =  sanity_check_labels_exist(x_test_files,y_test_files, y)
 
     x_train = beo.MultiArray([np.load(f, mmap_mode='r') for f in x_train_files])
     y_train = beo.MultiArray([np.load(f, mmap_mode='r') for f in y_train_files])
@@ -84,6 +109,10 @@ def protocol_split(folder: str, split_percentage: float = 0.2, regions: list = N
     x_val_files = [f_name.replace('train', 'val') for f_name in x_train_files]
     y_val_files = [f_name.replace('train', 'val') for f_name in y_train_files]
 
+    x_train_files,y_train_files =  sanity_check_labels_exist(x_train_files,y_train_files, y)
+    x_val_files,y_val_files =  sanity_check_labels_exist(x_val_files,y_val_files, y)
+    x_test_files,y_test_files =  sanity_check_labels_exist(x_test_files,y_test_files, y)
+
     x_train = beo.MultiArray([np.load(f, mmap_mode='r') for f in x_train_files])
     y_train = beo.MultiArray([np.load(f, mmap_mode='r') for f in y_train_files])
 
@@ -126,6 +155,10 @@ def protocol_regions(folder: str, regions: list = None, y: str = 'y'):
 
         x_test_files = x_test_files + sorted(glob(os.path.join(folder, f"{region}*test_s2.npy")))
         y_test_files = y_test_files + sorted(glob(os.path.join(folder, f"{region}*test_label_{y}.npy")))
+
+    x_train_files,y_train_files =  sanity_check_labels_exist(x_train_files,y_train_files, y)
+    x_val_files,y_val_files =  sanity_check_labels_exist(x_val_files,y_val_files, y)
+    x_test_files,y_test_files =  sanity_check_labels_exist(x_test_files,y_test_files, y)
 
     x_train = beo.MultiArray([np.load(f, mmap_mode='r') for f in x_train_files])
     y_train = beo.MultiArray([np.load(f, mmap_mode='r') for f in y_train_files])

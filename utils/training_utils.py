@@ -13,6 +13,7 @@ import buteo as beo
 import os
 import sys; sys.path.append("..")
 import config_lc
+from collections import OrderedDict
 
 def patience_calculator(epoch, t_0, t_m, max_patience=50):
     """ Calculate the patience for the scheduler. """
@@ -327,3 +328,114 @@ def get_normalization(normalization_name, num_channels, num_groups=32, dims=2):
     else:
         raise ValueError(f"normalization must be one of batch, instance, layer, group, none. Got: {normalization_name}")
 
+
+def visualise_prediction_tile(tiles, model, data_folder = '/home/andreas/vscode/GeoSpatial/phi-lab-rd/data/road_segmentation/images', label='lc'):
+    
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    model.eval()
+    cmap='hot'
+    vmax=1
+
+
+    def nomralize(x, min=0, max=10000.0):
+        x = np.clip(x, min, max)
+        x = x / max
+        return x
+
+    def predict_numpy_arr(arr):
+        swap = beo.channel_last_to_first(arr)
+        as_torch = torch.from_numpy(swap.astype(np.float32, copy=False)).float()
+        on_device = as_torch.to(device)
+        predicted = model(on_device)
+        on_cpu = predicted.cpu()
+        as_numpy = on_cpu.numpy()
+        swap_back = beo.channel_first_to_last(as_numpy)
+
+        return swap_back
+
+
+    for p in tiles:
+        label_arr = beo.raster_to_array(f'{data_folder}/{p}_label_{label}.tif').astype(np.float32)
+        s2_arr = beo.raster_to_array(f'{data_folder}/{p}_0.tif')[:,:,[1,2,3,4,5,6,7,8,9,10]].astype(np.float32)
+
+
+        
+        # s2_arr = np.pad(s2_arr, pad_width=[(6,6),(6,6),(0,0)]) # make multiple of 16 for UNET
+        # label_arr = np.pad(label_arr, pad_width=[(6,6),(6,6),(0,0)]) # make multiple of 16 for UNET
+
+        s2_arr = nomralize(s2_arr)
+
+
+        with torch.no_grad():
+            predicted = beo.predict_array(
+                s2_arr,
+                predict_numpy_arr, # <-- defined in the utility functions.
+                tile_size=64,
+                n_offsets=5,
+                merge_method="mad",
+                batch_size=64
+            )
+        predicted[np.isnan(predicted)] = 0.0
+
+        if label=='lc':
+            lc_map_names = config_lc.lc_raw_classes
+            lc_map = config_lc.lc_model_map
+            lc_map_inverted = {v:k for k,v in zip(lc_map.keys(),lc_map.values())}
+            vmax=len(lc_map)
+
+            cmap = (matplotlib.colors.ListedColormap(config_lc.lc_color_map.values()))
+            norm = matplotlib.colors.Normalize(vmin=0, vmax=vmax)
+
+            predicted = predicted.argmax(axis=-1)
+
+            u,inv = np.unique(predicted,return_inverse = True)
+            predicted_og_format = np.array([lc_map_inverted[x] for x in u])[inv].reshape(predicted.shape).astype(np.float32)
+
+            u,inv = np.unique(label_arr,return_inverse = True)
+            label_arr_new_format = np.array([lc_map[x] for x in u])[inv].reshape(predicted.shape).astype(np.float32)
+
+        beo.array_to_raster(predicted_og_format, reference=f'{data_folder}/{p}_label_{label}.tif' ,out_path=f'pred_{p}.tif')
+
+        fig, (ax1,ax2,ax3) = plt.subplots(ncols=3,nrows=1, figsize=(10*3,10))
+        fig.tight_layout()
+        plt.subplots_adjust(wspace=0.01,hspace=0.01)
+
+        print(label_arr.shape)
+        ax1.imshow(predicted, vmax=vmax,vmin=0, cmap=cmap)
+        ax2.imshow(label_arr_new_format.squeeze(), vmax=vmax,vmin=0, cmap=cmap)
+        ax3.imshow(render_s2_as_rgb(s2_arr))
+
+        if label=='lc':
+            patches = [mpatches.Patch(color=cmap(norm(u)), label=lc_map_names[lc_map_inverted[u]]) for u in lc_map_inverted.keys()]
+            plt.legend(handles=patches)
+        plt.savefig(f'Pred_{p.split("/")[-1]}.png')
+        plt.clf()
+    plt.close('all')
+
+
+def port_layers(pretrained_sd, unet, freeze_encoder=False):
+    model_sd = unet.state_dict()
+    shared_weights = OrderedDict()
+
+    assert len(pretrained_sd.keys())<len(model_sd.keys()), 'Encoder cannot have more layers than full Unet'
+
+    for k, name in zip(pretrained_sd.keys(),model_sd.keys()):
+        if k.startswith('head'):
+            continue
+        v = pretrained_sd[k]
+        if pretrained_sd[k].size() == model_sd[name].size():
+            shared_weights[name]=v
+        else:
+            print(k,name)
+            raise ValueError(f"weights of pretrained encoder layer {k} are not compatible with model layer {name}")
+    model_sd.update(shared_weights)
+    unet.load_state_dict(model_sd, strict=True)
+
+    if freeze_encoder:
+        for name,param in unet.named_parameters():#shared_weights.keys():
+            if name in shared_weights.keys():
+                param.requires_grad = False
+
+    print(f'weights loaded succesfully, encoder frozen = {freeze_encoder}')
+    return unet
